@@ -52,13 +52,12 @@ import (
 const (
 	obfs4proxyVersion = "0.0.14"
 	obfs4proxyLogFile = "obfs4proxy.log"
-	socksAddr         = "127.0.0.1:0"
 )
 
 var stateDir string
 var termMon *termMonitor
 
-func clientSetup() (launched bool, listeners []net.Listener) {
+func clientSetup(socksAddr string) (launched bool, listeners []net.Listener) {
 	ptClientInfo, err := pt.ClientSetup(transports.Transports())
 	if err != nil {
 		golog.Fatal(err)
@@ -312,8 +311,10 @@ func main() {
 	_, execName := path.Split(os.Args[0])
 	showVer := flag.Bool("version", false, "Print version and exit")
 	logLevelStr := flag.String("logLevel", "ERROR", "Log level (ERROR/WARN/INFO/DEBUG)")
-	enableLogging := flag.Bool("enableLogging", false, "Log to TOR_PT_STATE_LOCATION/"+obfs4proxyLogFile)
+	enableLogging := flag.Bool("enableLogging", false, "Log to "+obfs4proxyLogFile)
 	unsafeLogging := flag.Bool("unsafeLogging", false, "Disable the address scrubber")
+	isClient := flag.Bool("isClient", false, "Run in a client mode")
+	socksAddr := flag.String("listenAddr", "127.0.0.1:0", "Specify address to listen on")
 	flag.Parse()
 
 	if *showVer {
@@ -327,14 +328,15 @@ func main() {
 	// Determine if this is a client or server, initialize the common state.
 	var ptListeners []net.Listener
 	var launched bool
-	isClient, err := ptIsClient()
-	if err != nil {
-		golog.Fatalf("[ERROR]: %s - must be run as a managed transport", execName)
-	}
+	// isClient, err := ptIsClient()
+	// if err != nil {
+	// 	golog.Fatalf("[ERROR]: %s - must be run as a managed transport", execName)
+	// }
+	var err error
 	if stateDir, err = pt.MakeStateDir(); err != nil {
 		golog.Fatalf("[ERROR]: %s - No state directory: %s", execName, err)
 	}
-	if err = log.Init(*enableLogging, path.Join(stateDir, obfs4proxyLogFile), *unsafeLogging); err != nil {
+	if err = log.Init(*enableLogging, path.Join("./", obfs4proxyLogFile), *unsafeLogging); err != nil {
 		golog.Fatalf("[ERROR]: %s - failed to initialize logging", execName)
 	}
 	if err = transports.Init(); err != nil {
@@ -345,9 +347,9 @@ func main() {
 	log.Noticef("%s - launched", getVersion())
 
 	// Do the managed pluggable transport protocol configuration.
-	if isClient {
+	if *isClient {
 		log.Infof("%s - initializing client transport listeners", execName)
-		launched, ptListeners = clientSetup()
+		launched, ptListeners = clientSetup(*socksAddr)
 	} else {
 		log.Infof("%s - initializing server transport listeners", execName)
 		launched, ptListeners = serverSetup()
